@@ -46,6 +46,8 @@
 using namespace clang;
 using namespace sema;
 
+#include <iostream>
+
 /// \brief Determine whether the use of this declaration is valid, without
 /// emitting diagnostics.
 bool Sema::CanUseDecl(NamedDecl *D) {
@@ -4565,6 +4567,7 @@ ExprResult
 Sema::ActOnCallExpr(Scope *S, Expr *Fn, SourceLocation LParenLoc,
                     MultiExprArg ArgExprs, SourceLocation RParenLoc,
                     Expr *ExecConfig, bool IsExecConfig) {
+
   // Since this might be a postfix expression, get rid of ParenListExprs.
   ExprResult Result = MaybeConvertParenListExprToParenExpr(S, Fn);
   if (Result.isInvalid()) return ExprError();
@@ -4593,6 +4596,72 @@ Sema::ActOnCallExpr(Scope *S, Expr *Fn, SourceLocation LParenLoc,
       Fn = result.get();
     }
 
+    {
+      Expr *NakedFn = Fn->IgnoreParens();
+      NamedDecl *NDecl = nullptr;
+      if (UnaryOperator *UnOp = dyn_cast<UnaryOperator>(NakedFn))
+        if (UnOp->getOpcode() == UO_AddrOf)
+          NakedFn = UnOp->getSubExpr()->IgnoreParens();
+  
+      if (isa<DeclRefExpr>(NakedFn))
+        NDecl = cast<DeclRefExpr>(NakedFn)->getDecl();
+      else if (isa<MemberExpr>(NakedFn))
+        NDecl = cast<MemberExpr>(NakedFn)->getMemberDecl();
+
+      if (FunctionDecl *FD = dyn_cast_or_null<FunctionDecl>(NDecl)) {
+        std::cout << __func__ << ':' << __LINE__ << std::endl;
+        if (FD->hasAttr<PosAttr>())
+        {
+          for(specific_attr_iterator<PosAttr> first = FD->specific_attr_begin<PosAttr>()
+                , last = FD->specific_attr_end<PosAttr>()
+                ;first != last; ++first)
+            {
+              std::cerr << "xx.cpp:1:1: should handle pos attribute" << std::endl;
+
+              
+            }
+        }
+        else if (FD->hasAttr<PreAttr>())
+        {
+          for(specific_attr_iterator<PreAttr> first = FD->specific_attr_begin<PreAttr>()
+                , last = FD->specific_attr_end<PreAttr>()
+                ;first != last; ++first)
+            {
+              std::cerr << "xx.cpp:1:1: should handle pre attribute" << std::endl;
+
+              Expr* cond = first->getCond();
+
+              std::cerr << "xx.cpp:1:2: " << cond->getStmtClass() << std::endl;
+              cond->dump();
+              std::cerr << std::endl;
+              cond->dumpPretty(Context);
+              std::cerr << std::endl;
+              cond->viewAST();
+              std::cerr << std::endl;
+
+              if(isa<CallExpr>(cond))
+              {
+                CallExpr const* call = cast<CallExpr>(cond);
+                std::cout << "is a call expr" << std::endl;
+
+                FunctionDecl const* FD = call->getDirectCallee();
+                if(FD->hasAttr<PropertyAttr>())
+                {
+                  std::cerr << "Has property attribute" << std::endl;
+                }
+              }
+              
+              // // Since this might be a postfix expression, get rid of ParenListExprs.
+              // ExprResult Result = MaybeConvertParenListExprToParenExpr(S, Fn);
+              // if (Result.isInvalid()) return ExprError();
+              // Fn = Result.get();
+
+              
+            }
+        }
+      }
+    }
+    
     // Determine whether this is a dependent call inside a C++ template,
     // in which case we won't do any semantic analysis now.
     // FIXME: Will need to cache the results of name lookup (including ADL) in
@@ -4603,7 +4672,11 @@ Sema::ActOnCallExpr(Scope *S, Expr *Fn, SourceLocation LParenLoc,
     else if (Expr::hasAnyTypeDependentArguments(ArgExprs))
       Dependent = true;
 
+    std::cerr << __func__ << ':' << __LINE__ << std::endl;
+
     if (Dependent) {
+      std::cerr << __func__ << ':' << __LINE__ << std::endl;
+
       if (ExecConfig) {
         return new (Context) CUDAKernelCallExpr(
             Context, Fn, cast<CallExpr>(ExecConfig), ArgExprs,
@@ -4616,8 +4689,12 @@ Sema::ActOnCallExpr(Scope *S, Expr *Fn, SourceLocation LParenLoc,
 
     // Determine whether this is a call to an object (C++ [over.call.object]).
     if (Fn->getType()->isRecordType())
+      {
+        std::cerr << __func__ << ':' << __LINE__ << std::endl;
+
       return BuildCallToObjectOfClassType(S, Fn, LParenLoc, ArgExprs,
                                           RParenLoc);
+      }
 
     if (Fn->getType() == Context.UnknownAnyTy) {
       ExprResult result = rebuildUnknownAnyFunction(*this, Fn);
@@ -4626,6 +4703,7 @@ Sema::ActOnCallExpr(Scope *S, Expr *Fn, SourceLocation LParenLoc,
     }
 
     if (Fn->getType() == Context.BoundMemberTy) {
+      std::cerr << __func__ << ':' << __LINE__ << std::endl;
       return BuildCallToMemberFunction(S, Fn, LParenLoc, ArgExprs, RParenLoc);
     }
   }
@@ -4639,9 +4717,13 @@ Sema::ActOnCallExpr(Scope *S, Expr *Fn, SourceLocation LParenLoc,
       OverloadExpr *ovl = find.Expression;
       if (isa<UnresolvedLookupExpr>(ovl)) {
         UnresolvedLookupExpr *ULE = cast<UnresolvedLookupExpr>(ovl);
+        std::cerr << __func__ << ':' << __LINE__ << std::endl;
+
         return BuildOverloadedCallExpr(S, Fn, ULE, LParenLoc, ArgExprs,
                                        RParenLoc, ExecConfig);
       } else {
+        std::cerr << __func__ << ':' << __LINE__ << std::endl;
+
         return BuildCallToMemberFunction(S, Fn, LParenLoc, ArgExprs,
                                          RParenLoc);
       }
@@ -4667,7 +4749,12 @@ Sema::ActOnCallExpr(Scope *S, Expr *Fn, SourceLocation LParenLoc,
   else if (isa<MemberExpr>(NakedFn))
     NDecl = cast<MemberExpr>(NakedFn)->getMemberDecl();
 
+  std::cerr << __func__ << ':' << __LINE__ << std::endl;
+  
   if (FunctionDecl *FD = dyn_cast_or_null<FunctionDecl>(NDecl)) {
+
+    std::cerr << "FunctionDecl" << std::endl;
+    
     if (FD->hasAttr<EnableIfAttr>()) {
       if (const EnableIfAttr *Attr = CheckEnableIf(FD, ArgExprs, true)) {
         Diag(Fn->getLocStart(),

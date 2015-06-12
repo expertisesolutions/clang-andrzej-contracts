@@ -3440,6 +3440,8 @@ static AttributeList::Kind getAttrListKind(AttributedType::Kind kind) {
     return AttributeList::AT_SPtr;
   case AttributedType::attr_uptr:
     return AttributeList::AT_UPtr;
+  case AttributedType::attr_pos:
+    return AttributeList::AT_Pos;
   }
   llvm_unreachable("unexpected attribute kind!");
 }

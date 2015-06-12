@@ -3479,7 +3479,9 @@ public:
     attr_ptr32,
     attr_ptr64,
     attr_sptr,
-    attr_uptr
+    attr_uptr,
+    attr_property,
+    attr_pos
   };
 
 private:

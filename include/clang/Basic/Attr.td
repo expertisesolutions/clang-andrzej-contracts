@@ -359,6 +359,24 @@ def Aligned : InheritableAttr {
   let Documentation = [Undocumented];
 }
 
+def Pos : Attr {
+  let Spellings = [GCC<"pos">];
+  let Args = [ExprArgument<"Cond">];
+  let Subjects = SubjectList<[Function]>;
+  let Documentation = [Undocumented];
+  bit LateParsed = 1;
+  bit ParseArgumentsAsUnevaluated = 1;
+}
+
+def Pre : Attr {
+  let Spellings = [GCC<"pre">];
+  let Args = [ExprArgument<"Cond">];
+  let Subjects = SubjectList<[Function]>;
+  let Documentation = [Undocumented];
+  bit LateParsed = 1;
+  bit ParseArgumentsAsUnevaluated = 1;
+}
+
 def AlignValue : Attr {
   let Spellings = [
     // Unfortunately, this is semantically an assertion, not a directive
@@ -459,6 +477,12 @@ def Bounded : IgnoredAttr {
 def CarriesDependency : InheritableParamAttr {
   let Spellings = [GNU<"carries_dependency">,
                    CXX11<"","carries_dependency", 200809>];
+  let Subjects = SubjectList<[ParmVar, ObjCMethod, Function], ErrorDiag>;
+  let Documentation = [CarriesDependencyDocs];
+}
+
+def Property : InheritableParamAttr {
+  let Spellings = [CXX11<"","property", 200809>];
   let Subjects = SubjectList<[ParmVar, ObjCMethod, Function], ErrorDiag>;
   let Documentation = [CarriesDependencyDocs];
 }

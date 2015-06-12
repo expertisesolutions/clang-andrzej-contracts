@@ -30,6 +30,9 @@
 #include "clang/Sema/Scope.h"
 #include "llvm/ADT/StringExtras.h"
 #include "llvm/Support/MathExtras.h"
+
+#include <iostream>
+
 using namespace clang;
 using namespace sema;
 
@@ -923,6 +926,23 @@ static void handleParamTypestateAttr(Sema &S, Decl *D,
                                 Attr.getAttributeSpellingListIndex()));
 }
 
+static void handlePostCondition(Sema& S, Decl* D, AttributeList const& Attr)
+{
+  Expr *Cond = Attr.getArgAsExpr(0);
+  
+  D->addAttr(::new (S.Context)
+             PosAttr(Attr.getRange(), S.Context, Cond,
+                     Attr.getAttributeSpellingListIndex()));
+}
+
+static void handlePreCondition(Sema& S, Decl* D, AttributeList const& Attr)
+{
+  Expr *Cond = Attr.getArgAsExpr(0);
+  
+  D->addAttr(::new (S.Context)
+             PreAttr(Attr.getRange(), S.Context, Cond,
+                     Attr.getAttributeSpellingListIndex()));
+}
 
 static void handleReturnTypestateAttr(Sema &S, Decl *D,
                                       const AttributeList &Attr) {
@@ -4779,6 +4799,15 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
     break;
   case AttributeList::AT_TypeTagForDatatype:
     handleTypeTagForDatatypeAttr(S, D, Attr);
+    break;
+  case AttributeList::AT_Property:
+    handleSimpleAttribute<PropertyAttr>(S, D, Attr);
+    break;
+  case AttributeList::AT_Pos:
+    handlePostCondition(S, D, Attr);
+    break;
+  case AttributeList::AT_Pre:
+    handlePreCondition(S, D, Attr);
     break;
   }
 }
