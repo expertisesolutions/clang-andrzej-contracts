@@ -4801,6 +4801,7 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
     handleTypeTagForDatatypeAttr(S, D, Attr);
     break;
   case AttributeList::AT_Property:
+    std::cout << "a.cpp:1:1: property for " << static_cast<NamedDecl*>(D)->getQualifiedNameAsString() << std::endl;
     handleSimpleAttribute<PropertyAttr>(S, D, Attr);
     break;
   case AttributeList::AT_Pos:

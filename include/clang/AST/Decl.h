@@ -701,7 +701,7 @@ protected:
   /// \brief The initializer for this variable or, for a ParmVarDecl, the
   /// C++ default argument.
   mutable InitType Init;
-
+  std::vector<int> properties;
 private:
   class VarDeclBitfields {
     friend class VarDecl;
@@ -806,6 +806,8 @@ public:
   using redeclarable_base::getPreviousDecl;
   using redeclarable_base::getMostRecentDecl;
   using redeclarable_base::isFirstDecl;
+
+  std::vector<int>& getProperties() { return properties; }
 
   static VarDecl *Create(ASTContext &C, DeclContext *DC,
                          SourceLocation StartLoc, SourceLocation IdLoc,

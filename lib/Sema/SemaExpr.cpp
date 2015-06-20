@@ -4560,6 +4560,116 @@ static bool checkArgsForPlaceholders(Sema &S, MultiExprArg args) {
   return hasInvalid;
 }
 
+std::string GenerateCoqVisitExpr(Expr const* expression, ASTContext& Context)
+{
+  if(isa<ImplicitCastExpr>(expression))
+    {
+      return GenerateCoqVisitExpr(cast<ImplicitCastExpr>(expression)->getSubExpr(), Context);
+    }
+  else if(isa<CXXMemberCallExpr>(expression))
+    {
+      std::cout << __FILE__ << ":" << __LINE__ << ":0: CXXMemberCallExpr: " << std::flush;
+      expression->dump();
+      std::endl(std::cout);
+      CXXMemberCallExpr const* call = cast<CXXMemberCallExpr>(expression);
+
+
+      FunctionDecl const* FD = call->getDirectCallee();
+
+      std::string r = FD->getNameAsString();
+      r += ' ';
+      r += GenerateCoqVisitExpr(call->getImplicitObjectArgument(), Context);
+
+      for(CallExpr::const_arg_iterator first = call->arg_begin()
+            , last = call->arg_end()
+            ;first != last; ++first)
+        {
+          r += ' ';
+          r += GenerateCoqVisitExpr(*first, Context);
+        }
+      return r;
+    }
+  else if(isa<CallExpr>(expression))
+    {
+      std::cout << __FILE__ << ":" << __LINE__ << ":0: CallExpr: " << std::flush;
+      expression->dump();
+      std::endl(std::cout);
+      CallExpr const* call = cast<CallExpr>(expression);
+
+      FunctionDecl const* FD = call->getDirectCallee();
+      for(CallExpr::const_arg_iterator first = call->arg_begin()
+            , last = call->arg_end()
+            ;first != last; ++first)
+        {
+          GenerateCoqVisitExpr(*first, Context);
+        }
+      return "";
+    }
+  else if(isa<BinaryOperator>(expression))
+    {
+      std::cout << __FILE__ << ":" << __LINE__ << ":0: BinaryOperator" << std::endl;
+
+      BinaryOperator const* binop = cast<BinaryOperator>(expression);
+
+      std::string lhs = GenerateCoqVisitExpr(binop->getLHS(), Context);
+      std::string rhs = GenerateCoqVisitExpr(binop->getRHS(), Context);
+
+      switch(binop->getOpcode())
+        {
+        case BO_EQ:
+          return '(' + lhs + ") = (" + rhs + ')';
+          break;
+        default:
+          return "";
+        };
+    }
+  else if(isa<CXXThisExpr>(expression))
+    {
+      std::cout << __FILE__ << ":" << __LINE__ << ":0: CXXThisExpr" << std::endl;
+      return "self";
+    }
+  else if(isa<CXXBoolLiteralExpr>(expression))
+    {
+      std::cout << __FILE__ << ":" << __LINE__ << ":0: CXXBoolLiteralExpr" << std::endl;
+
+      CXXBoolLiteralExpr const* bool_expr = cast<CXXBoolLiteralExpr>(expression);
+      
+      return bool_expr->getValue()? "true" : "false";
+    }
+  else
+    {
+      std::cout << __FILE__ << ":" << __LINE__ << ": Couldn't find expression type: " << std::flush;
+      expression->dump();
+      std::cout << std::endl;
+      return "";
+    }
+}
+
+static void AnalyzePreExpr(FunctionDecl* FD, ASTContext& Context)
+{
+  for(specific_attr_iterator<PreAttr> first = FD->specific_attr_begin<PreAttr>()
+        , last = FD->specific_attr_end<PreAttr>()
+        ;first != last; ++first)
+    {
+      Expr* cond = first->getCond();
+      std::cout << __FILE__ << ":" << __LINE__ << ": dumping expression: " << std::flush;
+      cond->dump();
+      std::cout << std::endl;
+
+      std::string expr = GenerateCoqVisitExpr(cond, Context);
+      std::cout << "Coq expression: " << expr << std::endl;
+    }
+}
+
+static void AnalyzePosExpr(FunctionDecl* FD, ASTContext& Context)
+{
+  for(specific_attr_iterator<PosAttr> first = FD->specific_attr_begin<PosAttr>()
+        , last = FD->specific_attr_end<PosAttr>()
+        ;first != last; ++first)
+    {
+    }
+}
+
 /// ActOnCallExpr - Handle a call to Fn with the specified array of arguments.
 /// This provides the location of the left/right parens and a list of comma
 /// locations.
@@ -4568,11 +4678,19 @@ Sema::ActOnCallExpr(Scope *S, Expr *Fn, SourceLocation LParenLoc,
                     MultiExprArg ArgExprs, SourceLocation RParenLoc,
                     Expr *ExecConfig, bool IsExecConfig) {
 
+  // std::cerr << "1 ActOnCallExpr " << std::endl;
+  // Fn->dump();
+  // std::cerr << std::endl;
+
   // Since this might be a postfix expression, get rid of ParenListExprs.
   ExprResult Result = MaybeConvertParenListExprToParenExpr(S, Fn);
   if (Result.isInvalid()) return ExprError();
   Fn = Result.get();
 
+  // std::cerr << "2 ActOnCallExpr " << std::endl;
+  // Fn->dump();
+  // std::cerr << std::endl;
+  
   if (checkArgsForPlaceholders(*this, ArgExprs))
     return ExprError();
 
@@ -4609,55 +4727,139 @@ Sema::ActOnCallExpr(Scope *S, Expr *Fn, SourceLocation LParenLoc,
         NDecl = cast<MemberExpr>(NakedFn)->getMemberDecl();
 
       if (FunctionDecl *FD = dyn_cast_or_null<FunctionDecl>(NDecl)) {
-        std::cout << __func__ << ':' << __LINE__ << std::endl;
+        // std::cout << __func__ << ':' << __LINE__ << std::endl;
         if (FD->hasAttr<PosAttr>())
         {
-          for(specific_attr_iterator<PosAttr> first = FD->specific_attr_begin<PosAttr>()
-                , last = FD->specific_attr_end<PosAttr>()
-                ;first != last; ++first)
-            {
-              std::cerr << "xx.cpp:1:1: should handle pos attribute" << std::endl;
+          AnalyzePosExpr(FD, Context);
+          // for(specific_attr_iterator<PosAttr> first = FD->specific_attr_begin<PosAttr>()
+          //       , last = FD->specific_attr_end<PosAttr>()
+          //       ;first != last; ++first)
+          //   {
+          //     std::cerr << "xx.cpp:1:1: should handle pos attribute" << std::endl;
 
               
-            }
+          //     Expr* cond = first->getCond();
+
+          //     std::cerr << "xx.cpp:1:2: " << cond->getStmtClass() << std::endl;
+          //     cond->dump();
+          //     std::cerr << std::endl;
+          //     cond->dumpPretty(Context);
+          //     std::cerr << std::endl;
+          //     cond->viewAST();
+          //     std::cerr << std::endl;
+
+          //     if(isa<CallExpr>(cond))
+          //     {
+          //       CallExpr const* call = cast<CallExpr>(cond);
+          //       std::cout << "is a call expr" << std::endl;
+
+          //       FunctionDecl const* FD = call->getDirectCallee();
+          //       if(FD->hasAttr<PropertyAttr>())
+          //       {
+          //         std::cerr << "Has property attribute" << std::endl;
+
+          //         for(CallExpr::const_arg_iterator first = call->arg_begin()
+          //               , last = call->arg_end()
+          //               ;first != last; ++first)
+          //         {
+          //           std::cout << "argument" << std::endl;
+          //           if(UnaryOperator::classof(*first))
+          //           {
+          //             UnaryOperator const* op = static_cast<UnaryOperator const*>(*first);
+          //             if(op->getOpcode() == UO_Deref && CXXThisExpr::classof(op->getSubExpr()))
+          //             {
+          //               std::cout << "is *this" << std::endl;
+          //               if(MemberExpr::classof(Fn))
+          //               {
+          //                 Expr* base = static_cast<MemberExpr*>(Fn)->getBase();
+          //                 base->dump();
+          //                 std::cout << "decl?" << std::endl;
+          //                 static_cast<DeclRefExpr*>(base)->getDecl()->dump();
+          //                 static_cast<VarDecl*>(static_cast<DeclRefExpr*>(base)->getDecl())
+          //                   ->getProperties().push_back(0);
+          //               }
+          //             }
+          //           }
+          //         }
+          //       }
+          //     }
+          //     else
+          //     {
+          //       std::cout << "Not a call expr" << std::endl;
+          //     }
+          //   }
         }
         else if (FD->hasAttr<PreAttr>())
         {
-          for(specific_attr_iterator<PreAttr> first = FD->specific_attr_begin<PreAttr>()
-                , last = FD->specific_attr_end<PreAttr>()
-                ;first != last; ++first)
-            {
-              std::cerr << "xx.cpp:1:1: should handle pre attribute" << std::endl;
+          AnalyzePreExpr(FD, Context);
+          // for(specific_attr_iterator<PreAttr> first = FD->specific_attr_begin<PreAttr>()
+          //       , last = FD->specific_attr_end<PreAttr>()
+          //       ;first != last; ++first)
+          //   {
+          //     std::cerr << "xx.cpp:1:1: should handle pre attribute" << std::endl;
 
-              Expr* cond = first->getCond();
+          //     Expr* cond = first->getCond();
 
-              std::cerr << "xx.cpp:1:2: " << cond->getStmtClass() << std::endl;
-              cond->dump();
-              std::cerr << std::endl;
-              cond->dumpPretty(Context);
-              std::cerr << std::endl;
-              cond->viewAST();
-              std::cerr << std::endl;
+          //     std::cerr << "xx.cpp:1:2: " << cond->getStmtClass() << std::endl;
+          //     cond->dump();
+          //     std::cerr << std::endl;
+          //     cond->dumpPretty(Context);
+          //     std::cerr << std::endl;
+          //     cond->viewAST();
+          //     std::cerr << std::endl;
 
-              if(isa<CallExpr>(cond))
-              {
-                CallExpr const* call = cast<CallExpr>(cond);
-                std::cout << "is a call expr" << std::endl;
+          //     if(isa<CallExpr>(cond))
+          //     {
+          //       CallExpr const* call = cast<CallExpr>(cond);
+          //       std::cout << "is a call expr" << std::endl;
 
-                FunctionDecl const* FD = call->getDirectCallee();
-                if(FD->hasAttr<PropertyAttr>())
-                {
-                  std::cerr << "Has property attribute" << std::endl;
-                }
-              }
+          //       FunctionDecl const* FD = call->getDirectCallee();
+          //       if(FD->hasAttr<PropertyAttr>())
+          //       {
+          //         std::cerr << "Has property attribute" << std::endl;
+
+          //         for(CallExpr::const_arg_iterator first = call->arg_begin()
+          //               , last = call->arg_end()
+          //               ;first != last; ++first)
+          //         {
+          //           std::cout << "argument" << std::endl;
+          //           if(UnaryOperator::classof(*first))
+          //           {
+          //             UnaryOperator const* op = static_cast<UnaryOperator const*>(*first);
+          //             if(op->getOpcode() == UO_Deref && CXXThisExpr::classof(op->getSubExpr()))
+          //             {
+          //               std::cout << "is *this" << std::endl;
+          //               if(MemberExpr::classof(Fn))
+          //               {
+          //                 Expr* base = static_cast<MemberExpr*>(Fn)->getBase();
+          //                 base->dump();
+          //                 std::cout << "decl?" << std::endl;
+          //                 static_cast<DeclRefExpr*>(base)->getDecl()->dump();
+          //                 std::cout << "properties "
+          //                           << static_cast<VarDecl*>(static_cast<DeclRefExpr*>(base)->getDecl())
+          //                              ->getProperties().size()
+          //                           << std::endl;
+
+          //                 // base->addAttr(::new (S.Context) InternalPropertyAttr(Attr.getRange(), S.Context
+          //                 //                                                      , FD, Attr.getAttributeSpellingListIndex()));
+          //               }
+          //             }
+          //           }
+          //         }
+          //       }
+          //     }
+          //     else
+          //     {
+          //       std::cout << "Not a call expr" << std::endl;
+          //     }
               
-              // // Since this might be a postfix expression, get rid of ParenListExprs.
-              // ExprResult Result = MaybeConvertParenListExprToParenExpr(S, Fn);
-              // if (Result.isInvalid()) return ExprError();
-              // Fn = Result.get();
+          //     // // Since this might be a postfix expression, get rid of ParenListExprs.
+          //     // ExprResult Result = MaybeConvertParenListExprToParenExpr(S, Fn);
+          //     // if (Result.isInvalid()) return ExprError();
+          //     // Fn = Result.get();
 
               
-            }
+          //   }
         }
       }
     }
@@ -4672,10 +4874,10 @@ Sema::ActOnCallExpr(Scope *S, Expr *Fn, SourceLocation LParenLoc,
     else if (Expr::hasAnyTypeDependentArguments(ArgExprs))
       Dependent = true;
 
-    std::cerr << __func__ << ':' << __LINE__ << std::endl;
+    // std::cerr << __func__ << ':' << __LINE__ << std::endl;
 
     if (Dependent) {
-      std::cerr << __func__ << ':' << __LINE__ << std::endl;
+      // std::cerr << __func__ << ':' << __LINE__ << std::endl;
 
       if (ExecConfig) {
         return new (Context) CUDAKernelCallExpr(
@@ -4690,7 +4892,7 @@ Sema::ActOnCallExpr(Scope *S, Expr *Fn, SourceLocation LParenLoc,
     // Determine whether this is a call to an object (C++ [over.call.object]).
     if (Fn->getType()->isRecordType())
       {
-        std::cerr << __func__ << ':' << __LINE__ << std::endl;
+        // std::cerr << __func__ << ':' << __LINE__ << std::endl;
 
       return BuildCallToObjectOfClassType(S, Fn, LParenLoc, ArgExprs,
                                           RParenLoc);
@@ -4703,7 +4905,7 @@ Sema::ActOnCallExpr(Scope *S, Expr *Fn, SourceLocation LParenLoc,
     }
 
     if (Fn->getType() == Context.BoundMemberTy) {
-      std::cerr << __func__ << ':' << __LINE__ << std::endl;
+      // std::cerr << __func__ << ':' << __LINE__ << std::endl;
       return BuildCallToMemberFunction(S, Fn, LParenLoc, ArgExprs, RParenLoc);
     }
   }
@@ -4717,12 +4919,11 @@ Sema::ActOnCallExpr(Scope *S, Expr *Fn, SourceLocation LParenLoc,
       OverloadExpr *ovl = find.Expression;
       if (isa<UnresolvedLookupExpr>(ovl)) {
         UnresolvedLookupExpr *ULE = cast<UnresolvedLookupExpr>(ovl);
-        std::cerr << __func__ << ':' << __LINE__ << std::endl;
+        // std::cerr << __func__ << ':' << __LINE__ << std::endl;
 
         return BuildOverloadedCallExpr(S, Fn, ULE, LParenLoc, ArgExprs,
                                        RParenLoc, ExecConfig);
       } else {
-        std::cerr << __func__ << ':' << __LINE__ << std::endl;
 
         return BuildCallToMemberFunction(S, Fn, LParenLoc, ArgExprs,
                                          RParenLoc);
@@ -4749,11 +4950,11 @@ Sema::ActOnCallExpr(Scope *S, Expr *Fn, SourceLocation LParenLoc,
   else if (isa<MemberExpr>(NakedFn))
     NDecl = cast<MemberExpr>(NakedFn)->getMemberDecl();
 
-  std::cerr << __func__ << ':' << __LINE__ << std::endl;
+  // std::cerr << __func__ << ':' << __LINE__ << std::endl;
   
   if (FunctionDecl *FD = dyn_cast_or_null<FunctionDecl>(NDecl)) {
 
-    std::cerr << "FunctionDecl" << std::endl;
+    // std::cerr << "FunctionDecl" << std::endl;
     
     if (FD->hasAttr<EnableIfAttr>()) {
       if (const EnableIfAttr *Attr = CheckEnableIf(FD, ArgExprs, true)) {
