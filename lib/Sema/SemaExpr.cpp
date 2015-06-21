@@ -4560,11 +4560,14 @@ static bool checkArgsForPlaceholders(Sema &S, MultiExprArg args) {
   return hasInvalid;
 }
 
-std::string GenerateCoqVisitExpr(Expr const* expression, ASTContext& Context)
+std::map<VarDecl*, Expr*> properties;
+
+std::string GenerateCoqVisitExpr(Expr const* expression, ASTContext& Context, Expr* Fn
+                                 , std::vector<VarDecl*>& names)
 {
   if(isa<ImplicitCastExpr>(expression))
     {
-      return GenerateCoqVisitExpr(cast<ImplicitCastExpr>(expression)->getSubExpr(), Context);
+      return GenerateCoqVisitExpr(cast<ImplicitCastExpr>(expression)->getSubExpr(), Context, Fn, names);
     }
   else if(isa<CXXMemberCallExpr>(expression))
     {
@@ -4576,16 +4579,19 @@ std::string GenerateCoqVisitExpr(Expr const* expression, ASTContext& Context)
 
       FunctionDecl const* FD = call->getDirectCallee();
 
+      // Expr* base = static_cast<MemberExpr*>(FD)->getBase();
+      // assert(!!base);
+
       std::string r = FD->getNameAsString();
       r += ' ';
-      r += GenerateCoqVisitExpr(call->getImplicitObjectArgument(), Context);
+      r += GenerateCoqVisitExpr(call->getImplicitObjectArgument(), Context, Fn, names);
 
       for(CallExpr::const_arg_iterator first = call->arg_begin()
             , last = call->arg_end()
             ;first != last; ++first)
         {
           r += ' ';
-          r += GenerateCoqVisitExpr(*first, Context);
+          r += GenerateCoqVisitExpr(*first, Context, Fn, names);
         }
       return r;
     }
@@ -4601,7 +4607,7 @@ std::string GenerateCoqVisitExpr(Expr const* expression, ASTContext& Context)
             , last = call->arg_end()
             ;first != last; ++first)
         {
-          GenerateCoqVisitExpr(*first, Context);
+          GenerateCoqVisitExpr(*first, Context, Fn, names);
         }
       return "";
     }
@@ -4611,8 +4617,8 @@ std::string GenerateCoqVisitExpr(Expr const* expression, ASTContext& Context)
 
       BinaryOperator const* binop = cast<BinaryOperator>(expression);
 
-      std::string lhs = GenerateCoqVisitExpr(binop->getLHS(), Context);
-      std::string rhs = GenerateCoqVisitExpr(binop->getRHS(), Context);
+      std::string lhs = GenerateCoqVisitExpr(binop->getLHS(), Context, Fn, names);
+      std::string rhs = GenerateCoqVisitExpr(binop->getRHS(), Context, Fn, names);
 
       switch(binop->getOpcode())
         {
@@ -4626,6 +4632,18 @@ std::string GenerateCoqVisitExpr(Expr const* expression, ASTContext& Context)
   else if(isa<CXXThisExpr>(expression))
     {
       std::cout << __FILE__ << ":" << __LINE__ << ":0: CXXThisExpr" << std::endl;
+
+      Expr* base = static_cast<MemberExpr*>(Fn)->getBase();
+      
+      static_cast<DeclRefExpr*>(base)->getDecl()->dump();
+      VarDecl* var = static_cast<VarDecl*>(static_cast<DeclRefExpr*>(base)->getDecl());
+
+      std::cout  << "Self: " << std::flush;
+      var->dump();
+      std::endl(std::cout);
+
+      names.push_back(var);
+      
       return "self";
     }
   else if(isa<CXXBoolLiteralExpr>(expression))
@@ -4645,7 +4663,7 @@ std::string GenerateCoqVisitExpr(Expr const* expression, ASTContext& Context)
     }
 }
 
-static void AnalyzePreExpr(FunctionDecl* FD, ASTContext& Context)
+static void AnalyzePreExpr(Expr* Fn, FunctionDecl* FD, ASTContext& Context)
 {
   for(specific_attr_iterator<PreAttr> first = FD->specific_attr_begin<PreAttr>()
         , last = FD->specific_attr_end<PreAttr>()
@@ -4656,17 +4674,104 @@ static void AnalyzePreExpr(FunctionDecl* FD, ASTContext& Context)
       cond->dump();
       std::cout << std::endl;
 
-      std::string expr = GenerateCoqVisitExpr(cond, Context);
+      std::vector<VarDecl*> names;
+      std::string expr = GenerateCoqVisitExpr(cond, Context, Fn, names);
       std::cout << "Coq expression: " << expr << std::endl;
+      for(auto name : names)
+        {
+          auto iterator = properties.find(name);
+
+          if(iterator != properties.end())
+            {
+              std::cout << "Property" << std::endl;
+            }
+        }
     }
 }
 
-static void AnalyzePosExpr(FunctionDecl* FD, ASTContext& Context)
+void VarVisitExpr(Expr const* expression, ASTContext& Context, Expr* Fn
+                  , std::vector<VarDecl*>& names)
+{
+  if(isa<ImplicitCastExpr>(expression))
+    {
+      return VarVisitExpr(cast<ImplicitCastExpr>(expression)->getSubExpr(), Context, Fn, names);
+    }
+  else if(isa<CXXMemberCallExpr>(expression))
+    {
+      CXXMemberCallExpr const* call = cast<CXXMemberCallExpr>(expression);
+      FunctionDecl const* FD = call->getDirectCallee();
+
+      VarVisitExpr(call->getImplicitObjectArgument(), Context, Fn, names);
+
+      for(CallExpr::const_arg_iterator first = call->arg_begin()
+            , last = call->arg_end()
+            ;first != last; ++first)
+        {
+          VarVisitExpr(*first, Context, Fn, names);
+        }
+    }
+  else if(isa<CallExpr>(expression))
+    {
+      CallExpr const* call = cast<CallExpr>(expression);
+
+      FunctionDecl const* FD = call->getDirectCallee();
+      for(CallExpr::const_arg_iterator first = call->arg_begin()
+            , last = call->arg_end()
+            ;first != last; ++first)
+        {
+          VarVisitExpr(*first, Context, Fn, names);
+        }
+    }
+  else if(isa<BinaryOperator>(expression))
+    {
+      BinaryOperator const* binop = cast<BinaryOperator>(expression);
+
+      VarVisitExpr(binop->getLHS(), Context, Fn, names);
+      VarVisitExpr(binop->getRHS(), Context, Fn, names);
+    }
+  else if(isa<CXXThisExpr>(expression))
+    {
+      Expr* base = static_cast<MemberExpr*>(Fn)->getBase();
+      
+      static_cast<DeclRefExpr*>(base)->getDecl()->dump();
+      VarDecl* var = static_cast<VarDecl*>(static_cast<DeclRefExpr*>(base)->getDecl());
+
+      names.push_back(var);
+    }
+  // else if(isa<CXXBoolLiteralExpr>(expression))
+  //   {
+  //     std::cout << __FILE__ << ":" << __LINE__ << ":0: CXXBoolLiteralExpr" << std::endl;
+
+  //     CXXBoolLiteralExpr const* bool_expr = cast<CXXBoolLiteralExpr>(expression);
+      
+  //     return bool_expr->getValue()? "true" : "false";
+  //   }
+  // else
+  //   {
+  //     std::cout << __FILE__ << ":" << __LINE__ << ": Couldn't find expression type: " << std::flush;
+  //     expression->dump();
+  //     std::cout << std::endl;
+  //     return "";
+  //   }
+}
+
+static void AnalyzePosExpr(Expr* Fn, FunctionDecl* FD, ASTContext& Context)
 {
   for(specific_attr_iterator<PosAttr> first = FD->specific_attr_begin<PosAttr>()
         , last = FD->specific_attr_end<PosAttr>()
         ;first != last; ++first)
     {
+      Expr* cond = first->getCond();
+
+      std::vector<VarDecl*> names;
+      VarVisitExpr(cond, Context, Fn, names);
+
+      for(auto& name : names)
+        {
+          properties.insert(std::make_pair(name, cond));
+        }
+
+      std::cout << "Names " << names.size() << std::endl;
     }
 }
 
@@ -4730,7 +4835,7 @@ Sema::ActOnCallExpr(Scope *S, Expr *Fn, SourceLocation LParenLoc,
         // std::cout << __func__ << ':' << __LINE__ << std::endl;
         if (FD->hasAttr<PosAttr>())
         {
-          AnalyzePosExpr(FD, Context);
+          AnalyzePosExpr(Fn, FD, Context);
           // for(specific_attr_iterator<PosAttr> first = FD->specific_attr_begin<PosAttr>()
           //       , last = FD->specific_attr_end<PosAttr>()
           //       ;first != last; ++first)
@@ -4791,7 +4896,7 @@ Sema::ActOnCallExpr(Scope *S, Expr *Fn, SourceLocation LParenLoc,
         }
         else if (FD->hasAttr<PreAttr>())
         {
-          AnalyzePreExpr(FD, Context);
+          AnalyzePreExpr(Fn, FD, Context);
           // for(specific_attr_iterator<PreAttr> first = FD->specific_attr_begin<PreAttr>()
           //       , last = FD->specific_attr_end<PreAttr>()
           //       ;first != last; ++first)
