@@ -4801,7 +4801,53 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
     handleTypeTagForDatatypeAttr(S, D, Attr);
     break;
   case AttributeList::AT_Property:
-    std::cout << "a.cpp:1:1: property for " << static_cast<NamedDecl*>(D)->getQualifiedNameAsString() << std::endl;
+    {
+      std::cout << "a.cpp:1:1: property for " << static_cast<NamedDecl*>(D)->getQualifiedNameAsString() << std::endl;
+
+      if(FunctionDecl* FD = cast<FunctionDecl>(D))
+        {
+          std::string return_type;
+          
+          std::cout << "a.cpp:1:1: it is a function" << std::endl;
+
+          QualType type = FD->getCallResultType();
+          if(type.getTypePtr()->isIntegerType())
+            return_type = "nat";
+          else if(type.getTypePtr()->isBooleanType())
+            return_type = "Prop";
+          else
+            return_type = "unknown";
+
+          std::cout << "teste.v:1:1 Variable " << static_cast<NamedDecl*>(D)->getQualifiedNameAsString()
+                    << " : ";
+
+          for(FunctionDecl::param_iterator current = FD->param_begin()
+                , last = FD->param_end(); current != last; ++current)
+            {
+              std::string coq_type;
+              QualType type = (*current)->getOriginalType();
+              if(type.getTypePtr()->isIntegerType())
+                coq_type = "nat";
+              else if(type.getTypePtr()->isBooleanType())
+                coq_type = "Prop";
+              else if(type.getTypePtr()->isClassType())
+                {
+                  coq_type = "class_type";
+                }
+              else if(CXXRecordDecl* record = type.getTypePtr()->getAsCXXRecordDecl())
+                {
+                  coq_type = record->getNameAsString();
+                }
+              else
+                coq_type = "unknown";
+
+              std::cout << coq_type << " -> ";
+            }
+
+          std::cout << return_type << '.' << std::endl;
+        }
+    
+    }
     handleSimpleAttribute<PropertyAttr>(S, D, Attr);
     break;
   case AttributeList::AT_Pos:
