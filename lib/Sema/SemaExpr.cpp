@@ -4560,11 +4560,13 @@ static bool checkArgsForPlaceholders(Sema &S, MultiExprArg args) {
   return hasInvalid;
 }
 
-std::map<VarDecl*, Expr*> properties;
+std::map<VarDecl*, std::vector<Expr*> > properties;
 
 std::string GenerateCoqVisitExpr(Expr const* expression, ASTContext& Context, Expr* Fn
                                  , std::vector<VarDecl*>& names)
 {
+  std::cout << "generate coq from " << names.size() << " names" << std::endl;
+  
   if(isa<ImplicitCastExpr>(expression))
     {
       return GenerateCoqVisitExpr(cast<ImplicitCastExpr>(expression)->getSubExpr(), Context, Fn, names);
@@ -4629,6 +4631,25 @@ std::string GenerateCoqVisitExpr(Expr const* expression, ASTContext& Context, Ex
           return "";
         };
     }
+  else if(isa<UnaryOperator>(expression))
+    {
+      std::cout << __FILE__ << ":" << __LINE__ << ":0: UnaryOperator" << std::endl;
+
+      UnaryOperator const* unop = cast<UnaryOperator>(expression);
+
+      std::string rhs = GenerateCoqVisitExpr(unop->getSubExpr(), Context, Fn, names);
+
+      switch(unop->getOpcode())
+        {
+        case UO_Not:
+        case UO_LNot:
+          return "~(" + rhs + ')';
+          break;
+        default:
+          std::cout << __FILE__ << ":" << __LINE__ << ":0: Error Op " << (int)unop->getOpcode() << std::endl;
+          return "";
+        };
+    }
   else if(isa<CXXThisExpr>(expression))
     {
       std::cout << __FILE__ << ":" << __LINE__ << ":0: CXXThisExpr" << std::endl;
@@ -4665,6 +4686,7 @@ std::string GenerateCoqVisitExpr(Expr const* expression, ASTContext& Context, Ex
 
 static void AnalyzePreExpr(Expr* Fn, FunctionDecl* FD, ASTContext& Context)
 {
+  std::cout << __func__ << std::endl;
   for(specific_attr_iterator<PreAttr> first = FD->specific_attr_begin<PreAttr>()
         , last = FD->specific_attr_end<PreAttr>()
         ;first != last; ++first)
@@ -4677,13 +4699,14 @@ static void AnalyzePreExpr(Expr* Fn, FunctionDecl* FD, ASTContext& Context)
       std::vector<VarDecl*> names;
       std::string expr = GenerateCoqVisitExpr(cond, Context, Fn, names);
       std::cout << "Coq expression: " << expr << std::endl;
+      std::cout << "How many names in expr? " << names.size() << std::endl;
       for(auto name : names)
         {
           auto iterator = properties.find(name);
 
           if(iterator != properties.end())
             {
-              std::cout << "Property" << std::endl;
+              std::cout << "Found " << iterator->second.size() <<  " properties that might be used" << std::endl;
             }
         }
     }
@@ -4729,6 +4752,14 @@ void VarVisitExpr(Expr const* expression, ASTContext& Context, Expr* Fn
       VarVisitExpr(binop->getLHS(), Context, Fn, names);
       VarVisitExpr(binop->getRHS(), Context, Fn, names);
     }
+  else if(isa<UnaryOperator>(expression))
+    {
+      std::cout << __FILE__ << ":" << __LINE__ << ":0: UnaryOperator" << std::endl;
+
+      UnaryOperator const* unop = cast<UnaryOperator>(expression);
+
+      VarVisitExpr(unop->getSubExpr(), Context, Fn, names);
+    }
   else if(isa<CXXThisExpr>(expression))
     {
       Expr* base = static_cast<MemberExpr*>(Fn)->getBase();
@@ -4746,17 +4777,17 @@ void VarVisitExpr(Expr const* expression, ASTContext& Context, Expr* Fn
       
   //     return bool_expr->getValue()? "true" : "false";
   //   }
-  // else
-  //   {
-  //     std::cout << __FILE__ << ":" << __LINE__ << ": Couldn't find expression type: " << std::flush;
-  //     expression->dump();
-  //     std::cout << std::endl;
-  //     return "";
-  //   }
+  else
+    {
+      std::cout << __FILE__ << ":" << __LINE__ << ": Couldn't find expression type: " << std::flush;
+      expression->dump();
+      std::cout << std::endl;
+    }
 }
 
 static void AnalyzePosExpr(Expr* Fn, FunctionDecl* FD, ASTContext& Context)
 {
+  std::cout << __func__ << std::endl;
   for(specific_attr_iterator<PosAttr> first = FD->specific_attr_begin<PosAttr>()
         , last = FD->specific_attr_end<PosAttr>()
         ;first != last; ++first)
@@ -4768,7 +4799,7 @@ static void AnalyzePosExpr(Expr* Fn, FunctionDecl* FD, ASTContext& Context)
 
       for(auto& name : names)
         {
-          properties.insert(std::make_pair(name, cond));
+          properties[name].push_back(cond);
         }
 
       std::cout << "Names " << names.size() << std::endl;
