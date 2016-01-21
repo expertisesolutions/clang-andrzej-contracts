@@ -3442,6 +3442,10 @@ static AttributeList::Kind getAttrListKind(AttributedType::Kind kind) {
     return AttributeList::AT_UPtr;
   case AttributedType::attr_pos:
     return AttributeList::AT_Pos;
+  case AttributedType::attr_pre:
+    return AttributeList::AT_Pre;
+  case AttributedType::attr_pre_constants:
+    return AttributeList::AT_PreConstants;
   }
   llvm_unreachable("unexpected attribute kind!");
 }

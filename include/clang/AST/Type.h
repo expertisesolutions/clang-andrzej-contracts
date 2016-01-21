@@ -3481,7 +3481,9 @@ public:
     attr_sptr,
     attr_uptr,
     attr_property,
-    attr_pos
+    attr_pre,
+    attr_pos,
+    attr_pre_constants
   };
 
 private:

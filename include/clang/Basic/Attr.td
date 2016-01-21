@@ -377,6 +377,15 @@ def Pre : Attr {
   bit ParseArgumentsAsUnevaluated = 1;
 }
 
+def PreConstants : Attr {
+  let Spellings = [GCC<"pre_constants">];
+  let Args = [ExprArgument<"Cond">];
+  let Subjects = SubjectList<[Function]>;
+  let Documentation = [Undocumented];
+  bit LateParsed = 1;
+  bit ParseArgumentsAsUnevaluated = 1;
+}
+
 def AlignValue : Attr {
   let Spellings = [
     // Unfortunately, this is semantically an assertion, not a directive

@@ -944,6 +944,15 @@ static void handlePreCondition(Sema& S, Decl* D, AttributeList const& Attr)
                      Attr.getAttributeSpellingListIndex()));
 }
 
+static void handlePreConstantsCondition(Sema& S, Decl* D, AttributeList const& Attr)
+{
+  Expr *Cond = Attr.getArgAsExpr(0);
+  
+  D->addAttr(::new (S.Context)
+             PreConstantsAttr(Attr.getRange(), S.Context, Cond,
+                              Attr.getAttributeSpellingListIndex()));
+}
+
 static void handleReturnTypestateAttr(Sema &S, Decl *D,
                                       const AttributeList &Attr) {
   ReturnTypestateAttr::ConsumedState ReturnState;
@@ -4855,6 +4864,9 @@ static void ProcessDeclAttribute(Sema &S, Scope *scope, Decl *D,
     break;
   case AttributeList::AT_Pre:
     handlePreCondition(S, D, Attr);
+    break;
+  case AttributeList::AT_PreConstants:
+    handlePreConstantsCondition(S, D, Attr);
     break;
   }
 }

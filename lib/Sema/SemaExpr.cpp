@@ -4707,6 +4707,16 @@ static void AnalyzePreExpr(Expr* Fn, FunctionDecl* FD, ASTContext& Context)
           if(iterator != properties.end())
             {
               std::cout << "Found " << iterator->second.size() <<  " properties that might be used" << std::endl;
+
+              if(!iterator->second.empty())
+                {
+                  std::vector<VarDecl*> names;
+                  std::string hyp = GenerateCoqVisitExpr(iterator->second[0], Context, Fn, names);
+                  std::cout << "Coq expresssion for hypothesis " << hyp << std::endl;
+
+                  std::cout << "Hypothesis rule1 : " << hyp << "." << std::endl;
+                  std::cout << "Theorem theorem : " << expr << "." << std::endl;
+                }
             }
         }
     }
@@ -4799,6 +4809,7 @@ static void AnalyzePosExpr(Expr* Fn, FunctionDecl* FD, ASTContext& Context)
 
       for(auto& name : names)
         {
+          properties[name].clear(); // lets just remove everything for now
           properties[name].push_back(cond);
         }
 
@@ -4927,7 +4938,19 @@ Sema::ActOnCallExpr(Scope *S, Expr *Fn, SourceLocation LParenLoc,
         }
         else if (FD->hasAttr<PreAttr>())
         {
+          std::cout << "Should start section" << std::endl;
+          const DeclContext *DC = FD->getDeclContext();
+          if(DC->isRecord())
+            {
+              std::string name = static_cast<TagDecl const*>(DC)->getNameAsString();
+              std::cout << "DC isRecord! " << name << std::endl;
+              std::cout << "Variable " << name << " : Type." << std::endl;
+              std::cout << "Variable self : " << name << '.' << std::endl;
+            }
+
           AnalyzePreExpr(Fn, FD, Context);
+
+          std::cout << "Should end section" << std::endl;
           // for(specific_attr_iterator<PreAttr> first = FD->specific_attr_begin<PreAttr>()
           //       , last = FD->specific_attr_end<PreAttr>()
           //       ;first != last; ++first)
